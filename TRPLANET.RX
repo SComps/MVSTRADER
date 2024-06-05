@@ -1,0 +1,225 @@
+/* BREXX  */
+/* PLANET CODE */
+THISPLANET=KPLANET
+PLEAVING=0
+CALL READPLANET(KPLANET)
+/* the planet is loaded now */
+HOLDERR=COPIES(' ',80)
+DO WHILE PLEAVING=0
+   call showplanet
+END
+
+return
+
+SHOWPLANET:
+   ADDRESS FSS
+   IF STRIP(POWNER)='0' THEN
+      ZPOWNER='Not owned'
+   ELSE
+      ZPOWNER=POWNER
+   CALL FSSCLOSE
+   CALL FSSINIT
+   CALL FSSTITLE 'PLANETARY CUSTOMS CONTROL ('STRIP(PNAME)')'
+   CALL FSSCOMMAND
+   CALL FSSTEXT '       Owner:',4,3,,#PROT+#GREEN
+   CALL FSSTEXT ZPOWNER,4,18,,#PROT+#YELLOW
+   CALL FSSTEXT '    Fighters:',6,3,,#PROT+#GREEN
+   /* CALLING RIGHTADJ WITH 0 LENGTH BECAUSE 20 IS TOO MUCH */
+   CALL FSSTEXT RIGHTADJ(PFIGHTERS,0),6,18,,#PROT+#YELLOW
+   CALL FSSTEXT '       Mines:',7,3,,#PROT+#GREEN
+   CALL FSSTEXT RIGHTADJ(PMINES,0),7,18,,#PROT+#YELLOW
+   CALL FSSTEXT '1.      Food:',9,3,,#PROT+#GREEN
+   CALL FSSTEXT RIGHTADJ(PFOOD,0),9,18,,#PROT+#YELLOW
+   CALL FSSTEXT '2. Equipment:',10,3,,#PROT+#GREEN
+   CALL FSSTEXT RIGHTADJ(PEQUIP,0),10,18,,#PROT+#YELLOW
+   CALL FSSTEXT '3.  Material:',11,3,,#PROT+#GREEN
+   CALL FSSTEXT RIGHTADJ(PMATL,0),11,18,,#PROT+#YELLOW
+   CALL FSSTEXT '        Bank:',13,3,,#PROT+#GREEN
+   CALL FSSTEXT RIGHTADJ(PMONEY,0),13,18,,#PROT+#YELLOW
+   CALL FSSTEXT 'Gemesis Device:',6,40,,#PROT+#GREEN
+   CALL FSSTEXT RIGHTADJ(PGENDEV,0),6,56,,#PROT+#YELLOW
+   CALL FSSTEXT 'Defense Status:',8,40,,#PROT+#GREEN
+   CALL FSSTEXT RIGHTADJ(PPOSTURE,0),8,56,,#PROT+#YELLOW
+   CALL FSSTEXT 'Commands are:',17,3,,#PROT+#TURQ
+   CALL FSSTEXT '<S>TORAGE, <B>ANK, <F>IGHTER control, <M>INE control, <C>LAIM',18,3,,#PROT+#WHITE
+   CALL FSSTEXT '<G>ENESIS, <D>EFENSE <U>PGRADE ship',19,3,,#PROT+#WHITE
+   CALL FSSTEXT '<PFK03> EXIT, <PFK01> COMMAND HELP',24,3,,#PROT+#PINK
+   CALL FSSCURSOR 'ZCMD'
+   RKEY=FSSREFRESH()
+   MYCMD=FSSFGET('ZCMD')
+   IF RKEY=#PFK03 THEN
+      DO
+        PLEAVING=1
+      END
+   IF RKEY=#PFK01 THEN
+      DO
+         CALL PLNTHELP
+      END
+   IF RKEY=#ENTER THEN
+       CALL DOCMD
+RETURN
+
+DOCMD:
+   MYCMD=TRANSLATE(MYCMD)
+   PARSE VALUE MYCMD WITH CMD OPTS
+   IF LEFT(CMD,1)='U' THEN
+      DO
+         CALL ADDHOLDS
+         RETURN
+      END
+   IF LEFT(CMD,1)='B' THEN
+      DO
+      /* BANKING ROUTINES */
+      PARSE VALUE OPTS WITH SCMD VAL
+      SCMD=STRIP(SCMD)
+      VAL=STRIP(VAL)
+      IF SCMD = 'TAKE' THEN
+         DO
+           IF PMONEY<VAL THEN DO
+             SAY 'NOT ENOUGH MONEY TO TAKE'
+             RETURN
+             END
+           PMONEY=PMONEY-VAL
+           MONEY=MONEY+VAL
+           SAY "*** "VAL" has been deposited to your ship's account."
+         END
+      IF SCMD = 'LEAVE' THEN
+         DO
+            IF MONEY<VAL THEN RETURN
+            PMONEY=PMONEY+VAL
+            MONEY=MONEY-VAL
+         END
+         CALL UPDATEUSER
+         CALL UPDATEPLANET
+      END
+
+   IF LEFT(CMD,1)='S' THEN
+      DO
+         PARSE VALUE OPTS WITH PROD SCMD VAL
+         SCMD=STRIP(SCMD)
+         VAL=STRIP(VAL)
+         SELECT
+           WHEN SCMD='TAKE' THEN DO
+                AMOUNT=VAL
+                HOLDS_LEFT=HOLDS-(FOOD+EQUIP+MATL)
+                IF AMOUNT>HOLDS_LEFT THEN RETURN
+                END
+           WHEN SCMD='LEAVE' THEN DO
+                AMOUNT=(0-VAL)
+                END
+         END
+
+         SELECT
+           WHEN PROD=1 THEN DO
+                /* FOOD */
+                  IF ABS(AMOUNT)>FOOD THEN RETURN
+                  PFOOD=PFOOD-AMOUNT
+                  FOOD=FOOD+AMOUNT
+                END
+           WHEN PROD=2 THEN DO
+                  IF ABS(AMOUNT)>EQUIP THEN RETURN
+                  PEQUIP=PEQUIP-AMOUNT
+                  EQUIP=EQUIP+AMOUNT
+                END
+           WHEN PROD=3 THEN DO
+                  IF ABS(AMOUNT)>MATL THEN RETURN
+                  PMATL=PMATL-AMOUNT
+                  MATL=MATL+AMOUNT
+                END
+           OTHERWISE DO
+                END
+         END
+         CALL UPDATEUSER
+         CALL UPDATEPLANET
+      END
+RETURN
+
+PLNTHELP:
+ADDRESS FSS
+CALL FSSCLOSE
+CALL FSSINIT
+CALL FSSTITLE 'PLANET COMMANDS HELP'
+CALL FSSTEXT 'PFK03 TO EXIT',2,1,,#PROT+#WHITE
+CALL FSSTEXT 'Most commands are in the form of <command> (product) TAKE|LEAVE <amount>',4,1,,#prot+#turq
+CALL FSSTEXT 'STORAGE: For food, equipment and material.  Specify product (1-3)',6,1,,#prot+#turq
+CALL FSSTEXT 'STORAGE is the only command requiring the product parameter.',7,1,,#prot+#turq
+CALL FSSTEXT 'Example:  STORAGE 1 TAKE 100 will take 100 holds of Food from the planet.',8,1,,#prot+#turq
+CALL FSSTEXT 'BANK, FIGHTER, MINE and GENESIS do not require a product number.',10,1,,#prot+#turq
+CALL FSSTEXT 'CLAIM: requires no options.  If the planet is unclaimed, you can process the',12,1,,#prot+#turq
+CALL FSSTEXT 'registration, and pay the appropriate fee.',13,1,,#prot+#turq
+CALL FSSTEXT 'DEFENSE sets the defense posture for this planet.',15,1,,#prot+#turq
+CALL FSSTEXT '  param 1 supports NONE, SELF, TEAM',16,1,,#prot+#turq
+CALL FSSTEXT '  param 2 supports MIN, MAX, NEGOTIATE',17,1,,#PROT+#TURQ
+CALL FSSTEXT 'The defense mode is active when a ship requests to land.  If a ship tries',19,1,,#prot+#turq
+CALL FSSTEXT 'to attack the planet (even the owner) the planet will use maximum force.',20,1,,#prot+#turq
+CALL FSSTEXT 'In the event the owner attacks the planet (why?) and is killed, ownership',21,1,,#prot+#turq
+CALL FSSTEXT 'will be lost.',22,1,,#prot+#turq
+DO FOREVER
+   RKEY=FSSREFRESH()
+   IF RKEY=#PFK03 THEN LEAVE
+END
+RETURN
+
+ADDHOLDS:
+   ADDRESS FSS
+   CALL FSSCLOSE
+   CALL FSSINIT
+   CALL FSSTITLE 'SHIP CARGO UPGRADE',#PROT
+   CALL FSSTEXT 'You currently have '||HOLDS||'holds onboard.',4,3,,#prot+#green
+   PURCH=0
+   HOLD_PRICE=150+RANDOM(0,200,right(time('long'),6))
+   HOLD_MULT=HOLDS/1000
+   IF HOLD_MULT<1 THEN HOLD_MULT=1
+   FINAL_PRICE=TRUNC(HOLD_PRICE*HOLD_MULT,0)
+   CALL FSSTEXT 'Price per additional hold:',7,3,,#prot+#green
+   CALL FSSTEXT '         Additional holds:',8,3,,#prot+#green
+   CALL FSSTEXT FINAL_PRICE,7,32,,#PROT+#YELLOW
+   CALL FSSFIELD 'ZHOLDS',8,32,6,,#PROT+#YELLOW
+   CALL FSSFSET 'ZHOLDS',0
+   CALL FSSTEXT 'Cost to install:',10,3,,#prot+#green
+   CALL FSSFIELD 'ZPURCH',10,32,,#PROT+#YELLOW
+   CALL FSSTEXT '<PFK03> EXIT/CANCEL, <ENTER> CHECK AVAILABILITY  <PFK10> COMPLETE PURCHASE',23,1,,#PROT+#PINK
+   CALL FSSTEXT "Holds are important to your financial future.  They let you carry product for",12,3,,#prot+#turq
+   call FSSTEXT "trading.  Holds can only be installed on a planet, and the dealers are often",13,3,,#prot+#turq
+   call FSSTEXT "flaky with their pricing.  About the only thing you can count on is that the",14,3,,#prot+#turq
+   call FSSTEXT "prices of holds increase with the number of holds you already have.",15,3,,#prot+#turq
+   call fsstext "These dealers are often a bit rude.  They will not buy holds from you.  EVER!",17,3,,#prot+#white
+   CALL FSSCURSOR 'ZHOLDS'
+   DO FOREVER
+      HKEY=FSSREFRESH()
+      CALL FSSCURSOR 'ZHOLDS'
+      NEW_HOLDS=FSSFGET('ZHOLDS')
+      IF HKEY=#ENTER THEN
+         DO
+            IF NEW_HOLDS<0 THEN do
+               HOLDERR="Hey pal! We sell holds here, not buy.  We don't want your stinkin' holds!"
+               call fsstext holderr,24,1,,#prot+#red
+               ITERATE
+            end
+            PURCH=NEW_HOLDS*FINAL_PRICE
+            IF PURCH>MONEY THEN
+               DO
+                  HOLDERR="You do not have enough credits to complete this transaction."
+                  CALL FSSTEXT HOLDERR,24,1,,#PROT+#WHITE
+               end
+             ELSE
+               DO
+                  CALL FSSTEXT COPIES(' ',79),24,1,,#PROT+#WHITE
+               END
+         END
+      IF HKEY=#PFK10 THEN
+         DO
+         /* TAKE THE MONEY ADD THE HOLDS */
+         /* JUST IN CASE THE USER CHANGED STUFF BEFORE F10 */
+         PURCH=NEW_HOLDS*FINAL_PRICE
+         IF PURCH<=MONEY THEN
+            DO
+              MONEY=MONEY-PURCH
+              HOLDS=HOLDS+NEW_HOLDS
+              CALL UPDATEUSER
+              LEAVE
+            END
+          END
+      IF HKEY=#PFK03 THEN LEAVE
+      CALL FSSFSET 'ZPURCH',PURCH
+   END
