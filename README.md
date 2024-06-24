@@ -12,7 +12,8 @@ or ScottJ on discord
 The latest XMIT date contains all the code.  The REXX uploaded here may be older than the XMIT.
 Grab the PDF and the install REXX, as well as the XMIT.  
 
-The short is upload the XMIT to your MVS
+The short is upload the XMIT to your MVS <B<USING BINARY TRANSFER</b>
+
 
 Upload the INSTALL script as TEXT
 
@@ -21,5 +22,7 @@ Upload the INSTALL script as TEXT
 Modify the username/password in the install script if necessary
 Run the install script.
 
-Pray.
+<I>Pray.</I>
+
+
 
