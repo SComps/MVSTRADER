@@ -36,16 +36,23 @@ SHOWPLANET:
    CALL FSSTEXT RIGHTADJ(PMATL,0),11,18,,#PROT+#YELLOW
    CALL FSSTEXT '        Bank:',13,3,,#PROT+#GREEN
    CALL FSSTEXT RIGHTADJ(PMONEY,0),13,18,,#PROT+#YELLOW
-   CALL FSSTEXT 'Gemesis Device:',6,40,,#PROT+#GREEN
+   CALL FSSTEXT 'Genesis Device:',6,40,,#PROT+#GREEN
    CALL FSSTEXT RIGHTADJ(PGENDEV,0),6,56,,#PROT+#YELLOW
    CALL FSSTEXT 'Defense Status:',8,40,,#PROT+#GREEN
-   CALL FSSTEXT RIGHTADJ(PPOSTURE,0),8,56,,#PROT+#YELLOW
+   POSTR='OPEN'
+   IF PPOSTURE='4' THEN POSTR='HOSTILE'
+   IF PPOSTURE='3' THEN POSTR='TEAM DEFENSIVE'
+   IF PPOSTURE='2' THEN POSTR='NEGOTIATING'
+   IF PPOSTURE='1' THEN POSTR='FRIENDLY'
+   CALL FSSTEXT RIGHTADJ(POSTR,0),8,56,,#PROT+#YELLOW
    CALL FSSTEXT 'Commands are:',17,3,,#PROT+#TURQ
    CALL FSSTEXT '<S>TORAGE, <B>ANK, <F>IGHTER control, <M>INE control, <C>LAIM',18,3,,#PROT+#WHITE
    CALL FSSTEXT '<G>ENESIS, <D>EFENSE <U>PGRADE ship',19,3,,#PROT+#WHITE
-   CALL FSSTEXT '<PFK03> EXIT, <PFK01> COMMAND HELP',24,3,,#PROT+#PINK
+   CALL FSSTEXT '<PFK03> EXIT, <PFK01> COMMAND HELP',23,3,,#PROT+#PINK
+   CALL FSSTEXT PLANERROR,24,3,,#PROT+#WHITE
    CALL FSSCURSOR 'ZCMD'
    RKEY=FSSREFRESH()
+   PLANERROR=COPIES(' ',79)
    MYCMD=FSSFGET('ZCMD')
    IF RKEY=#PFK03 THEN
       DO
@@ -62,6 +69,12 @@ RETURN
 DOCMD:
    MYCMD=TRANSLATE(MYCMD)
    PARSE VALUE MYCMD WITH CMD OPTS
+   IF LEFT(CMD,1)='C' THEN
+      DO
+        /* CLAIM THIS PLANET */
+        CALL CLAIMPLANET
+      END
+
    IF LEFT(CMD,1)='U' THEN
       DO
          CALL ADDHOLDS
@@ -96,13 +109,20 @@ DOCMD:
    IF LEFT(CMD,1)='S' THEN
       DO
          PARSE VALUE OPTS WITH PROD SCMD VAL
+         SAY 'PARSING 'OPTS
          SCMD=STRIP(SCMD)
          VAL=STRIP(VAL)
+         SAY 'EXECUTING ['SCMD'], WITH 'VAL' OF ['PROD']'
          SELECT
            WHEN SCMD='TAKE' THEN DO
                 AMOUNT=VAL
                 HOLDS_LEFT=HOLDS-(FOOD+EQUIP+MATL)
-                IF AMOUNT>HOLDS_LEFT THEN RETURN
+                IF AMOUNT>HOLDS_LEFT THEN
+                   DO
+                      SAY 'NOT ENOUGH HOLDS LEFT.'
+                      PULL ANYKEY
+                      RETURN
+                   END
                 END
            WHEN SCMD='LEAVE' THEN DO
                 AMOUNT=(0-VAL)
@@ -112,17 +132,20 @@ DOCMD:
          SELECT
            WHEN PROD=1 THEN DO
                 /* FOOD */
-                  IF ABS(AMOUNT)>FOOD THEN RETURN
+                  IF ABS(AMOUNT)>PFOOD THEN DO
+                     SAY 'CANNOT 'ABS(AMOUNT)' FOOD.'
+                     RETURN
+                  END
                   PFOOD=PFOOD-AMOUNT
                   FOOD=FOOD+AMOUNT
                 END
            WHEN PROD=2 THEN DO
-                  IF ABS(AMOUNT)>EQUIP THEN RETURN
+                  IF ABS(AMOUNT)>PEQUIP THEN RETURN
                   PEQUIP=PEQUIP-AMOUNT
                   EQUIP=EQUIP+AMOUNT
                 END
            WHEN PROD=3 THEN DO
-                  IF ABS(AMOUNT)>MATL THEN RETURN
+                  IF ABS(AMOUNT)>PMATL THEN RETURN
                   PMATL=PMATL-AMOUNT
                   MATL=MATL+AMOUNT
                 END
@@ -217,9 +240,48 @@ ADDHOLDS:
               MONEY=MONEY-PURCH
               HOLDS=HOLDS+NEW_HOLDS
               CALL UPDATEUSER
+              CALL UPDATEPLANET
               LEAVE
             END
           END
       IF HKEY=#PFK03 THEN LEAVE
       CALL FSSFSET 'ZPURCH',PURCH
    END
+
+CLAIMPLANET:
+   /* REGISTER A CLAIM FOR THIS PLANET */
+   IF STRIP(POWNER)<>STRIP(USERID) THEN
+      DO
+         IF STRIP(POWNER)<>'0' THEN
+            DO
+              /* THIS PLANET IS ALREADY OWNED */
+              PLANERROR='This planet is already owned.'
+              return
+          end
+      END
+   /* IF WE'RE HERE, THE PLANET IS UP FOR GRABS */
+   CALL FSSCLOSE
+   CALL FSSINIT
+   CALL FSSTITLE 'PLANETARY REGISTRATION'
+   CALL FSSTEXT 'New planet name:',5,4,,#prot+#green
+   CALL FSSFIELD 'ZPLANET',5,22,30,#YELLOW,STRIP(PNAME)
+   CALL FSSCURSOR 'ZPLANET'
+   CALL FSSTEXT 'PFK03=CANCEL   ENTER=REGISTER',23,1,,#PROT+#WHITE
+   DO UNTIL CPLEAVING=1
+      LKEY=FSSREFRESH()
+      IF LKEY=#PFK03 THEN
+         DO
+            CPLEAVING=1
+            ITERATE
+         END
+      IF LKEY=#ENTER THEN
+         DO
+           RPLANET=FSSFGET('ZPLANET')
+           PNAME=STRIP(RPLANET)
+           POWNER=USERID
+           CALL UPDATEPLANET
+           CPLEAVING=1
+           PLANERROR='You are the owner of this planet.  Defend it well.'
+         END
+   END
+   RETURN
